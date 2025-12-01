@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:patrol/src/native/native_automator.dart';
 import 'package:patrol/src/native/native_automator2.dart';
 import 'package:patrol_finders/patrol_finders.dart' as finders;
@@ -12,7 +13,14 @@ class PatrolIntegrationTester extends finders.PatrolTester {
     required super.config,
     required this.nativeAutomator,
     required this.nativeAutomator2,
-  }) : _patrolLog = PatrolLogWriter();
+  }) : _patrolLog = PatrolLogWriter() {
+    // DEBUG: Log handle count in PatrolIntegrationTester constructor
+    final handlesInConstructor =
+        SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+    print(
+      '[PATROL_DEBUG] PatrolIntegrationTester constructor: $handlesInConstructor handles',
+    );
+  }
 
   /// The log for the patrol.
   final PatrolLogWriter _patrolLog;

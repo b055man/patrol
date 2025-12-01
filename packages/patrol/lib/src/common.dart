@@ -2,6 +2,7 @@ import 'dart:developer';
 
 import 'package:boolean_selector/boolean_selector.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:meta/meta.dart';
 import 'package:patrol/src/binding.dart';
@@ -96,15 +97,53 @@ void patrolTest(
   LiveTestWidgetsFlutterBindingFramePolicy framePolicy =
       LiveTestWidgetsFlutterBindingFramePolicy.fadePointers,
 }) {
+  // DEBUG: Log handle count at patrolTest entry
+  final handlesAtEntry =
+      SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+  print(
+    '[PATROL_DEBUG] patrolTest() entry: $handlesAtEntry handles (test: "$description")',
+  );
+
   final patrolLog = PatrolLogWriter(config: {'printLogs': config.printLogs});
   final automator = NativeAutomator(config: nativeAutomatorConfig);
   final automator2 = NativeAutomator2(config: nativeAutomatorConfig);
+
+  // DEBUG: Log handle count before ensureInitialized
+  final handlesBeforeBinding =
+      SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+  print(
+    '[PATROL_DEBUG] Before PatrolBinding.ensureInitialized(): $handlesBeforeBinding handles',
+  );
+
   final patrolBinding = PatrolBinding.ensureInitialized(nativeAutomatorConfig)
     ..framePolicy = framePolicy;
+
+  // DEBUG: Log handle count after ensureInitialized
+  final handlesAfterBinding =
+      SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+  print(
+    '[PATROL_DEBUG] After PatrolBinding.ensureInitialized(): $handlesAfterBinding handles',
+  );
+  if (handlesAfterBinding != handlesBeforeBinding) {
+    print(
+      '[PATROL_DEBUG] ⚠️ Handle count changed during PatrolBinding.ensureInitialized()!',
+    );
+    print(
+      '[PATROL_DEBUG] Changed from $handlesBeforeBinding to $handlesAfterBinding',
+    );
+  }
 
   if (skip ?? false) {
     patrolLog.log(TestEntry(name: description, status: TestEntryStatus.skip));
   }
+
+  // DEBUG: Log handle count before testWidgets() call
+  final handlesBeforeTestWidgets =
+      SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+  print(
+    '[PATROL_DEBUG] Before testWidgets() call: $handlesBeforeTestWidgets handles',
+  );
+
   testWidgets(
     description,
     skip: skip,
@@ -113,11 +152,26 @@ void patrolTest(
     variant: variant,
     tags: tags,
     (widgetTester) async {
+      // DEBUG: Log handle count right after testWidgets callback starts
+      final handlesAtCallbackStart =
+          SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+      print(
+        '[PATROL_DEBUG] testWidgets callback start: $handlesAtCallbackStart handles',
+      );
+
       widgetTester.binding.platformDispatcher.onSemanticsEnabledChanged = () {
         // This callback is empty on purpose. It's a workaround for tests
         // failing on iOS and (from Flutter 3.29.0) on Android.
         //
         // See https://github.com/leancodepl/patrol/issues/1474
+
+        // DEBUG: Log handle count when semantics enabled changes
+        final handlesOnChange =
+            SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+        print(
+          '[PATROL_DEBUG] onSemanticsEnabledChanged callback: $handlesOnChange handles',
+        );
+        print('[PATROL_DEBUG] Stack trace:\n${StackTrace.current}');
       };
 
       if (!constants.hotRestartEnabled) {
@@ -133,20 +187,82 @@ void patrolTest(
         }
       }
 
+      // DEBUG: Log handle count before automator.configure()
+      final handlesBeforeConfigure =
+          SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+      print(
+        '[PATROL_DEBUG] Before automator.configure(): $handlesBeforeConfigure handles',
+      );
+
       await automator.configure();
+
+      // DEBUG: Log handle count after automator.configure()
+      final handlesAfterConfigure =
+          SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+      print(
+        '[PATROL_DEBUG] After automator.configure(): $handlesAfterConfigure handles',
+      );
+      if (handlesAfterConfigure != handlesBeforeConfigure) {
+        print(
+          '[PATROL_DEBUG] ⚠️ Handle count changed during automator.configure()!',
+        );
+        print(
+          '[PATROL_DEBUG] Changed from $handlesBeforeConfigure to $handlesAfterConfigure',
+        );
+        print('[PATROL_DEBUG] Stack trace:\n${StackTrace.current}');
+      }
       // We don't have to call this line because automator.configure() does the same.
       // await automator2.configure();
 
       patrolLog.log(
         TestEntry(name: description, status: TestEntryStatus.start),
       );
+
+      // DEBUG: Log handle count before PatrolIntegrationTester creation
+      final handlesBeforeTester =
+          SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+      print(
+        '[PATROL_DEBUG] Before PatrolIntegrationTester creation: $handlesBeforeTester handles',
+      );
+
       final patrolTester = PatrolIntegrationTester(
         tester: widgetTester,
         nativeAutomator: automator,
         nativeAutomator2: automator2,
         config: config,
       );
+
+      // DEBUG: Log handle count after PatrolIntegrationTester creation
+      final handlesAfterTester =
+          SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+      print(
+        '[PATROL_DEBUG] After PatrolIntegrationTester creation: $handlesAfterTester handles',
+      );
+      if (handlesAfterTester != handlesBeforeTester) {
+        print(
+          '[PATROL_DEBUG] ⚠️ Handle count changed during PatrolIntegrationTester creation!',
+        );
+        print(
+          '[PATROL_DEBUG] Changed from $handlesBeforeTester to $handlesAfterTester',
+        );
+        print('[PATROL_DEBUG] Stack trace:\n${StackTrace.current}');
+      }
+
+      // DEBUG: Log handle count before test body execution
+      final handlesBeforeTestBody =
+          SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+      print(
+        '[PATROL_DEBUG] Before test body execution (callback): $handlesBeforeTestBody handles',
+      );
+
       await callback(patrolTester);
+
+      // DEBUG: Log handle count after test body execution
+      final handlesAfterTestBody =
+          SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+      print(
+        '[PATROL_DEBUG] After test body execution (callback): $handlesAfterTestBody handles',
+      );
 
       if (debugDefaultTargetPlatformOverride !=
           patrolBinding.workaroundDebugDefaultTargetPlatformOverride) {
