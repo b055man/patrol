@@ -264,6 +264,75 @@ void patrolTest(
         '[PATROL_DEBUG] After test body execution (callback): $handlesAfterTestBody handles',
       );
 
+      // WORKAROUND: Flutter's testWidgets() creates 2 handles but only tracks/disposes 1.
+      // The second handle is orphaned and causes test failures. We attempt to work around this
+      // by trying to trigger cleanup mechanisms that might dispose the orphaned handle.
+      //
+      // Strategy: If we detect 2 handles at callback start and after test body,
+      // we try various cleanup mechanisms to dispose the orphaned handle before
+      // Flutter's verification runs.
+      if (handlesAtCallbackStart == 2 && handlesAfterTestBody == 2) {
+        print(
+          '[PATROL_DEBUG] ⚠️  WORKAROUND: Detected 2 handles (Flutter bug - creates 2, tracks 1). '
+          'Attempting to dispose orphaned handle...',
+        );
+
+        try {
+          // Strategy 1: Force a semantics update which might trigger cleanup of orphaned handles
+          widgetTester.binding.pipelineOwner.flushSemantics();
+          await widgetTester.pump();
+
+          var handlesAfterFlush =
+              SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+
+          if (handlesAfterFlush < handlesAfterTestBody) {
+            print(
+              '[PATROL_DEBUG] ✓ Flush succeeded: handles reduced from '
+              '$handlesAfterTestBody to $handlesAfterFlush',
+            );
+          } else {
+            // Strategy 2: Try to trigger a semantics tree rebuild which might clean up handles
+            // This is done by temporarily disabling and re-enabling semantics
+            final binding = widgetTester.binding;
+            if (binding is TestWidgetsFlutterBinding) {
+              // Force a full pipeline flush
+              binding.pipelineOwner.flushLayout();
+              binding.pipelineOwner.flushCompositingBits();
+              binding.pipelineOwner.flushPaint();
+              binding.pipelineOwner.flushSemantics();
+
+              await widgetTester.pump();
+              await widgetTester
+                  .pump(); // Extra pump to ensure everything settles
+
+              handlesAfterFlush =
+                  SemanticsBinding.instance.debugOutstandingSemanticsHandles;
+
+              if (handlesAfterFlush < handlesAfterTestBody) {
+                print(
+                  '[PATROL_DEBUG] ✓ Full pipeline flush succeeded: handles reduced from '
+                  '$handlesAfterTestBody to $handlesAfterFlush',
+                );
+              } else {
+                print(
+                  '[PATROL_DEBUG] ⚠️  Workaround did not reduce handle count '
+                  '($handlesAfterTestBody → $handlesAfterFlush). '
+                  'Test may still fail with SemanticsHandle error. '
+                  'This is a Flutter framework bug where testWidgets() creates 2 handles '
+                  'but only tracks/disposes 1.',
+                );
+              }
+            }
+          }
+        } catch (e, stackTrace) {
+          print(
+            '[PATROL_DEBUG] ⚠️  Workaround failed: $e\n'
+            'Stack trace: $stackTrace\n'
+            'Test may fail with SemanticsHandle error. This is a Flutter framework bug.',
+          );
+        }
+      }
+
       if (debugDefaultTargetPlatformOverride !=
           patrolBinding.workaroundDebugDefaultTargetPlatformOverride) {
         debugDefaultTargetPlatformOverride =
